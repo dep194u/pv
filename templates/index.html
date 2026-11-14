@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three-House AI Energy Management</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">B.TECH PROJECT • SIMULATION DASHBOARD</div>
+    <h1>Smart PV-Battery Energy Management</h1>
+    <p>AI load and solar prediction • Three houses • P2P energy sharing • Battery and grid cost analysis</p>
+  </div>
+</header>
+<main class="wrap">
+  <section class="notice">
+    <strong>Prototype note:</strong> AI models currently use generated demo training data. Results are illustrative, not validated forecasts or real-time measurements.
+  </section>
+  <form method="POST" class="panel">
+    <h2>1. Prediction conditions</h2>
+    <div class="fields">
+      <label>Hour of day (0–23)<input type="number" name="hour" min="0" max="23" step="1" value="18"></label>
+      <label>Day type<select name="weekend"><option value="0">Weekday</option><option value="1">Weekend</option></select></label>
+      <label>Ambient temperature (°C)<input type="number" name="ambient_temp" value="30" min="0" max="50" step="0.5"></label>
+      <label>Solar irradiance (W/m²)<input type="number" name="irradiance" value="600" min="0" max="1200" step="10"></label>
+      <label>PV panel temperature (°C)<input type="number" name="panel_temp" value="40" min="-10" max="90" step="0.5"></label>
+      <label>Previous PV output (per kWp, 0–1.2)<input type="number" name="previous_pv" value="0.5" min="0" max="1.2" step="0.05"></label>
+    </div>
+    <h2>2. House settings</h2>
+    <div class="house-grid">
+      {% set defaults = [(3,1.2),(2,1.0),(0,1.4)] %}
+      {% for i in range(1,4) %}
+      <div class="house-input">
+        <h3>House {{ i }}</h3>
+        <label>PV capacity (kWp)<input type="number" name="h{{i}}_pv_capacity" min="0" max="20" step="0.1" value="{{ defaults[i-1][0] }}"></label>
+        <label>Previous load (kW)<input type="number" name="h{{i}}_prev_load" min="0" max="10" step="0.1" value="{{ defaults[i-1][1] }}"></label>
+      </div>
+      {% endfor %}
+    </div>
+    <h2>3. Shared battery and tariff settings</h2>
+    <div class="fields">
+      <label>Battery capacity (kWh)<input type="number" name="battery_capacity" min="0.1" max="100" step="0.5" value="10"></label>
+      <label>Initial battery SOC (%)<input type="number" name="soc" min="0" max="100" step="1" value="50"></label>
+      <label>Max charge/discharge power (kW)<input type="number" name="battery_power" min="0" max="50" step="0.5" value="3"></label>
+      <label>Grid import tariff (₹/kWh)<input type="number" name="grid_tariff" min="0" max="100" step="0.1" value="8"></label>
+      <label>Grid export tariff (₹/kWh)<input type="number" name="export_tariff" min="0" max="100" step="0.1" value="3"></label>
+      <label>P2P trading price (₹/kWh)<input type="number" name="p2p_tariff" min="0" max="100" step="0.1" value="7"></label>
+    </div>
+    <button type="submit">Predict and manage energy</button>
+  </form>
+
+  {% if result %}
+  <section class="results">
+    <div class="result-heading">
+      <div><div class="eyebrow">SIMULATION OUTPUT</div><h2>Energy prediction and management</h2></div>
+      <span class="pill">One-hour interval</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span>Total predicted load</span><strong>{{ "%.2f"|format(result.total_load) }} kW</strong></div>
+      <div class="metric"><span>Total predicted PV</span><strong>{{ "%.2f"|format(result.total_pv) }} kW</strong></div>
+      <div class="metric"><span>P2P energy traded</span><strong>{{ "%.2f"|format(result.p2p_total) }} kWh</strong></div>
+      <div class="metric"><span>Grid import</span><strong>{{ "%.2f"|format(result.grid_import) }} kWh</strong></div>
+    </div>
+    <div class="panel">
+      <h2>House-wise AI predictions</h2>
+      <div class="table-scroll"><table>
+        <thead><tr><th>House</th><th>PV capacity</th><th>Predicted load</th><th>Predicted PV</th><th>Energy balance</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for h in result.houses %}
+          <tr><td>{{ h.name }}</td><td>{{ "%.1f"|format(h.pv_capacity) }} kWp</td><td>{{ "%.2f"|format(h.load) }} kW</td><td>{{ "%.2f"|format(h.pv) }} kW</td><td>{{ "%+.2f"|format(h.balance) }} kW</td><td>{% if h.balance > 0.02 %}<span class="surplus">Surplus</span>{% elif h.balance < -0.02 %}<span class="deficit">Deficit</span>{% else %}<span class="neutral">Balanced</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <h2>P2P energy transactions</h2>
+        {% if result.trades %}
+          {% for trade in result.trades %}
+          <div class="trade"><strong>{{ trade.from }}</strong><span>→</span><strong>{{ trade.to }}</strong><b>{{ "%.2f"|format(trade.energy) }} kWh</b></div>
+          {% endfor %}
+        {% else %}
+          <p class="muted">No P2P trade is required under these predicted conditions.</p>
+        {% endif %}
+      </div>
+      <div class="panel">
+        <h2>Shared battery</h2>
+        <div class="soc-line"><strong>{{ "%.1f"|format(result.old_soc) }}%</strong><span>Initial SOC</span></div>
+        <div class="bar"><span style="width: {{ result.new_soc }}%"></span></div>
+        <div class="soc-line"><strong>{{ "%.1f"|format(result.new_soc) }}%</strong><span>Estimated SOC after this interval</span></div>
+        <p>Charged: <b>{{ "%.2f"|format(result.battery_charge) }} kWh</b></p>
+        <p>Discharged: <b>{{ "%.2f"|format(result.battery_discharge) }} kWh</b></p>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Grid and indicative cost calculation</h2>
+      <div class="cost-grid">
+        <div><span>Grid import</span><b>{{ "%.2f"|format(result.grid_import) }} kWh</b></div>
+        <div><span>Grid export</span><b>{{ "%.2f"|format(result.grid_export) }} kWh</b></div>
+        <div><span>Grid import cost</span><b>₹{{ "%.2f"|format(result.grid_cost) }}</b></div>
+        <div><span>Export revenue</span><b>₹{{ "%.2f"|format(result.export_revenue) }}</b></div>
+        <div><span>P2P buyer payment (total)</span><b>₹{{ "%.2f"|format(result.p2p_payment) }}</b></div>
+        <div><span>Net grid cost</span><b>₹{{ "%.2f"|format(result.net_grid_cost) }}</b></div>
+      </div>
+      <p class="formula">Grid import cost = imported energy × grid tariff. Export revenue = exported energy × export tariff. P2P payment = traded energy × P2P price. P2P payment is shown separately and is not added to the community's net grid cost.</p>
+    </div>
+    <div class="panel">
+      <h2>Energy management summary</h2>
+      <ol>
+        <li>The AI models estimate the load and PV output for each house.</li>
+        <li>Houses with extra PV energy are matched with houses having an energy deficit.</li>
+        <li>After P2P matching, the shared battery absorbs remaining surplus or supports remaining deficit, subject to limits.</li>
+        <li>Any remaining deficit is imported from the grid; any remaining surplus is exported.</li>
+      </ol>
+    </div>
+  </section>
+  {% endif %}
+  <footer>Academic simulation prototype • Not for real-world equipment control</footer>
+</main>
+</body>
+</html>
